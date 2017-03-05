@@ -837,6 +837,7 @@ dtb-$(CONFIG_MACH_SUN8I) += \
 	sun8i-a23-polaroid-mid2809pxe04.dtb \
 	sun8i-a23-q8-tablet.dtb \
 	sun8i-a33-et-q8-v1.6.dtb \
+	sun8i-a33-olinuxino.dtb \
 	sun8i-a33-ga10h-v1.1.dtb \
 	sun8i-a33-inet-d978-rev2.dtb \
 	sun8i-a33-ippo-q8h-v1.2.dtb \
@@ -845,6 +846,7 @@ dtb-$(CONFIG_MACH_SUN8I) += \
 	sun8i-a33-sinlinx-sina33.dtb \
 	sun8i-a83t-allwinner-h8homlet-v2.dtb \
 	sun8i-a83t-cubietruck-plus.dtb \
+	sun8i-h2plus-orangepi-zero.dtb \
 	sun8i-h3-bananapi-m2-plus.dtb \
 	sun8i-h3-nanopi-m1.dtb	\
 	sun8i-h3-nanopi-neo.dtb \
@@ -855,6 +857,7 @@ dtb-$(CONFIG_MACH_SUN8I) += \
 	sun8i-h3-orangepi-pc-plus.dtb \
 	sun8i-h3-orangepi-plus.dtb \
 	sun8i-h3-orangepi-plus2e.dtb \
+	sun8i-h3-beelink-x2.dtb \
 	sun8i-r16-parrot.dtb
 dtb-$(CONFIG_MACH_SUN9I) += \
 	sun9i-a80-optimus.dtb \
@@ -984,10 +987,16 @@ dtb-$(CONFIG_ARCH_MEDIATEK) += \
 dtb-$(CONFIG_ARCH_ZX) += zx296702-ad1.dtb
 dtb-$(CONFIG_ARCH_ASPEED) += aspeed-bmc-opp-palmetto.dtb \
 	aspeed-ast2500-evb.dtb
+
+targets += dtbs dtbs_install
+targets += $(dtb-y)
 endif
 
 dtstree		:= $(srctree)/$(src)
 dtb-$(CONFIG_OF_ALL_DTBS) := $(patsubst $(dtstree)/%.dts,%.dtb, $(wildcard $(dtstree)/*.dts))
 
 always		:= $(dtb-y)
+subdir-y	:= overlay
 clean-files	:= *.dtb
+
+dts-dirs += overlay

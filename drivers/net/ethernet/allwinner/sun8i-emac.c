@@ -307,6 +307,7 @@ struct txinfo {
 struct sun8i_emac_priv {
 	void __iomem *base;
 	struct regmap *regmap;
+	struct regmap *bps;
 	int irq;
 	struct device *dev;
 	struct net_device *ndev;
@@ -1088,6 +1089,9 @@ static int sun8i_emac_set_syscon(struct net_device *ndev)
 	switch (priv->phy_interface) {
 	case PHY_INTERFACE_MODE_MII:
 		/* default */
+		regmap_read(priv->bps, 0, &val);
+		reg &= ~(0xF << 28);
+		reg |= (((val >> 24) & 0x0F) + 3) << 28;
 		break;
 	case PHY_INTERFACE_MODE_RGMII:
 		reg |= SYSCON_EPIT | SYSCON_ETCS_INT_GMII;
@@ -2172,6 +2176,14 @@ static int sun8i_emac_probe(struct platform_device *pdev)
 	if (IS_ERR(priv->regmap)) {
 		ret = PTR_ERR(priv->regmap);
 		dev_err(&pdev->dev, "unable to map SYSCON:%d\n", ret);
+		return ret;
+	}
+
+	priv->bps = syscon_regmap_lookup_by_phandle(pdev->dev.of_node,
+						       "bps");
+	if (IS_ERR(priv->bps)) {
+		ret = PTR_ERR(priv->bps);
+		dev_err(&pdev->dev, "unable to map BPS_EFFUSE:%d\n", ret);
 		return ret;
 	}
 

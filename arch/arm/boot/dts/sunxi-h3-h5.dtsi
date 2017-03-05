@@ -105,6 +105,7 @@
 		emac: ethernet@1c30000 {
 			compatible = "allwinner,sun8i-h3-emac";
 			syscon = <&syscon>;
+			bps = <&bps>;
 			reg = <0x01c30000 0x104>;
 			interrupts = <GIC_SPI 82 IRQ_TYPE_LEVEL_HIGH>;
 			resets = <&ccu RST_BUS_EMAC>;
@@ -124,6 +125,11 @@
 					resets = <&ccu RST_BUS_EPHY>;
 				};
 			};
+		};
+
+		bps: bps@01c14210 {
+			compatible = "bps","syscon","allwinner,sun8i-bps";
+            reg = <0x01c14210 0x4>;
 		};
 
 		de: de-controller@01000000 {

@@ -33,6 +33,7 @@
 #include <linux/skbuff.h>
 #include <linux/mfd/syscon.h>
 #include <linux/regmap.h>
+#include <linux/nvmem-consumer.h>
 
 #define EMAC_BASIC_CTL0	0x00
 #define EMAC_BASIC_CTL1	0x04
@@ -303,7 +304,6 @@ struct txinfo {
 struct sun8i_emac_priv {
 	void __iomem *base;
 	struct regmap *regmap;
-	struct regmap *bps;
 	int irq;
 	struct device *dev;
 	struct net_device *ndev;
@@ -1017,12 +1017,29 @@ static void sun8i_emac_adjust_link(struct net_device *ndev)
 #define SYSCON_ETCS_INT_GMII	0x2
 #define SYSCON_EMAC_REG		0x30
 
+char *sid_read(struct device *dev, const char *cname)
+{
+	struct nvmem_cell *cell;
+	ssize_t data;
+	char *ret;
+
+	cell = nvmem_cell_get(dev, cname);
+	if (IS_ERR(cell))
+		return ERR_CAST(cell);
+
+	ret = nvmem_cell_read(cell, &data);
+	nvmem_cell_put(cell);
+
+	return ret;
+}
+
 static int sun8i_emac_set_syscon(struct net_device *ndev)
 {
 	struct sun8i_emac_priv *priv = netdev_priv(ndev);
 	struct device_node *node = priv->dev->of_node;
 	int ret;
 	u32 reg, val;
+	char *bps;
 
 	reg = priv->variant->default_syscon_value;
 
@@ -1076,9 +1093,17 @@ static int sun8i_emac_set_syscon(struct net_device *ndev)
 	switch (priv->phy_interface) {
 	case PHY_INTERFACE_MODE_MII:
 		/* default */
-		regmap_read(priv->bps, 0, &val);
+		bps = sid_read(priv->dev, "bps_effuse");
+		if (bps) {
+			val = bps[0] & 0xF;
+			netdev_info(ndev, "SID reports bps_effuse as %d\n", val);
+			kfree(bps);
+		} else {
+			netdev_err(ndev, "Could not read bps from SID\n");
+			val = 0;
+		}
 		reg &= ~(0xF << 28);
-		reg |= (((val >> 24) & 0x0F) + 3) << 28;
+		reg |= (val + 3) << 28;
 		break;
 	case PHY_INTERFACE_MODE_RGMII:
 		reg |= SYSCON_EPIT | SYSCON_ETCS_INT_GMII;
@@ -2151,14 +2176,6 @@ static int sun8i_emac_probe(struct platform_device *pdev)
 	if (IS_ERR(priv->regmap)) {
 		ret = PTR_ERR(priv->regmap);
 		dev_err(&pdev->dev, "unable to map SYSCON:%d\n", ret);
-		return ret;
-	}
-
-	priv->bps = syscon_regmap_lookup_by_phandle(pdev->dev.of_node,
-						       "bps");
-	if (IS_ERR(priv->bps)) {
-		ret = PTR_ERR(priv->bps);
-		dev_err(&pdev->dev, "unable to map BPS_EFFUSE:%d\n", ret);
 		return ret;
 	}
 

@@ -27,7 +27,7 @@
 static struct nvmem_config econfig = {
 	.name = "sunxi-sid",
 	.read_only = true,
-	.stride = 4,
+	.stride = 1,
 	.word_size = 1,
 	.owner = THIS_MODULE,
 };

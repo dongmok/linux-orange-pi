@@ -105,7 +105,8 @@
 		emac: ethernet@1c30000 {
 			compatible = "allwinner,sun8i-h3-emac";
 			syscon = <&syscon>;
-			bps = <&bps>;
+			nvmem-cells = <&bps_effuse>;
+			nvmem-cell-names = "bps_effuse";
 			reg = <0x01c30000 0x104>;
 			interrupts = <GIC_SPI 82 IRQ_TYPE_LEVEL_HIGH>;
 			resets = <&ccu RST_BUS_EMAC>;
@@ -127,9 +128,15 @@
 			};
 		};
 
-		bps: bps@01c14210 {
-			compatible = "bps","syscon","allwinner,sun8i-bps";
-            reg = <0x01c14210 0x4>;
+		sid: eeprom@01c14000 {
+			#address-cells = <1>;
+			#size-cells = <1>;
+			compatible = "allwinner,sun7i-a20-sid";
+			reg = <0x01c14000 0x400>;
+			/* bps for emac */
+			bps_effuse: bps@213 {
+				reg = <0x213 0x01>;
+			};
 		};
 
 		de: de-controller@01000000 {

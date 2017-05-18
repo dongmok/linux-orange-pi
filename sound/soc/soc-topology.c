@@ -344,7 +344,7 @@ static int soc_tplg_widget_load(struct soc_tplg *tplg,
 	return 0;
 }
 
-/* pass DAI configurations to component driver for extra intialization */
+/* pass DAI configurations to component driver for extra initialization */
 static int soc_tplg_dai_load(struct soc_tplg *tplg,
 	struct snd_soc_dai_driver *dai_drv)
 {
@@ -354,7 +354,7 @@ static int soc_tplg_dai_load(struct soc_tplg *tplg,
 	return 0;
 }
 
-/* pass link configurations to component driver for extra intialization */
+/* pass link configurations to component driver for extra initialization */
 static int soc_tplg_dai_link_load(struct soc_tplg *tplg,
 	struct snd_soc_dai_link *link)
 {
@@ -933,6 +933,7 @@ static int soc_tplg_denum_create_texts(struct soc_enum *se,
 		}
 	}
 
+	se->texts = (const char * const *)se->dobj.control.dtexts;
 	return 0;
 
 err:

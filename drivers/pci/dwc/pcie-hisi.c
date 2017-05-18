@@ -284,6 +284,8 @@ static int hisi_pcie_probe(struct platform_device *pdev)
 
 	driver = dev->driver;
 
+	hisi_pcie->pci = pci;
+
 	hisi_pcie->soc_ops = of_device_get_match_data(dev);
 
 	hisi_pcie->subctrl =
@@ -378,8 +380,12 @@ struct pci_ecam_ops hisi_pcie_platform_ops = {
 
 static const struct of_device_id hisi_pcie_almost_ecam_of_match[] = {
 	{
-		.compatible = "hisilicon,pcie-almost-ecam",
+		.compatible =  "hisilicon,hip06-pcie-ecam",
 		.data	    = (void *) &hisi_pcie_platform_ops,
+	},
+	{
+		.compatible =  "hisilicon,hip07-pcie-ecam",
+		.data       = (void *) &hisi_pcie_platform_ops,
 	},
 	{},
 };

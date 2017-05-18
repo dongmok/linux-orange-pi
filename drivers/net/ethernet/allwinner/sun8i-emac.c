@@ -96,6 +96,10 @@
 #define EMAC_FRM_FLT_CTL		BIT(13)
 #define EMAC_FRM_FLT_MULTICAST		BIT(16)
 
+/* Mac address */
+#define EMAC_MAX_MACADDR		8
+#define MAC_ADDR_TYPE_DST BIT(31)
+
 /* Used in BASIC_CTL0 */
 #define EMAC_BCTL0_FD			BIT(0)
 #define EMAC_BCTL0_LOOPBACK		BIT(1)
@@ -426,7 +430,7 @@ static int sun8i_emac_rx_skb(struct net_device *ndev, int i)
 	ddesc->buf_addr = cpu_to_le32(ddesc->buf_addr);
 	ddesc->ctl |= cpu_to_le32(DESC_BUF_MAX);
 	/* EMAC_COULD_BE_USED_BY_DMA must be the last value written */
-	wmb();
+	dma_wmb();
 	ddesc->status = EMAC_COULD_BE_USED_BY_DMA;
 
 	return 0;
@@ -450,7 +454,7 @@ static void sun8i_emac_stop_tx(struct net_device *ndev)
 	writel(v, priv->base + EMAC_TX_CTL1);
 
 	/* We must be sure that all is stopped before leaving this function */
-	wmb();
+	dma_wmb();
 }
 
 static void sun8i_emac_stop_rx(struct net_device *ndev)
@@ -469,7 +473,7 @@ static void sun8i_emac_stop_rx(struct net_device *ndev)
 	writel(v, priv->base + EMAC_RX_CTL1);
 
 	/* We must be sure that all is stopped before leaving this function */
-	wmb();
+	dma_wmb();
 }
 
 static void sun8i_emac_start_rx(struct net_device *ndev)
@@ -515,9 +519,16 @@ static void sun8i_emac_set_macaddr(struct sun8i_emac_priv *priv,
 {
 	u32 v;
 
+	if (index > 7) {
+		dev_err(priv->dev, "Too many MAC addr\n");
+		return;
+	}
+
 	dev_info(priv->dev, "device MAC address slot %d %pM", index, addr);
 
 	v = (addr[5] << 8) | addr[4];
+	if (index > 0)
+		v |= MAC_ADDR_TYPE_DST;
 	writel(v, priv->base + EMAC_MACADDR_HI + index * 8);
 
 	v = (addr[3] << 24) | (addr[2] << 16) | (addr[1] << 8) | addr[0];
@@ -696,7 +707,7 @@ static int sun8i_emac_rx_from_ddesc(struct net_device *ndev, int i)
 discard_frame:
 	ddesc->ctl = cpu_to_le32(DESC_BUF_MAX);
 	/* EMAC_COULD_BE_USED_BY_DMA must be the last value written */
-	wmb();
+	dma_wmb();
 	ddesc->status = EMAC_COULD_BE_USED_BY_DMA;
 	return 0;
 }
@@ -778,7 +789,7 @@ static int sun8i_emac_complete_xmit(struct net_device *ndev, int budget)
 		priv->txl[priv->tx_dirty].map = 0;
 		ddesc->ctl = 0;
 		/* setting status to DCLEAN is the last value to be set */
-		wmb();
+		dma_wmb();
 		ddesc->status = DCLEAN;
 		work++;
 
@@ -893,8 +904,8 @@ static int sun8i_mdio_write(struct mii_bus *bus, int phy_addr, int phy_reg,
 	reg |= MDIO_CMD_MII_WRITE;
 	reg |= MDIO_CMD_MII_BUSY;
 
-	writel(reg, priv->base + EMAC_MDIO_CMD);
 	writel(data, priv->base + EMAC_MDIO_DATA);
+	writel(reg, priv->base + EMAC_MDIO_CMD);
 
 	err = readl_poll_timeout(priv->base + EMAC_MDIO_CMD, reg,
 				 !(reg & MDIO_CMD_MII_BUSY), 100, 10000);
@@ -1036,6 +1047,8 @@ static int sun8i_emac_set_syscon(struct net_device *ndev)
 			if (of_property_read_bool(priv->phy_node,
 						  "allwinner,leds-active-low"))
 				reg |= H3_EPHY_LED_POL;
+			else
+				reg &= ~H3_EPHY_LED_POL;
 
 			ret = of_mdio_parse_addr(priv->dev, priv->phy_node);
 			if (ret < 0) {
@@ -1635,7 +1648,7 @@ static netdev_tx_t sun8i_emac_xmit(struct sk_buff *skb, struct net_device *ndev)
 
 	/* frame begin */
 	first->ctl |= EMAC_DSC_TX_FIRST;
-	wmb();/* EMAC_COULD_BE_USED_BY_DMA must be the last value written */
+	dma_wmb();/* EMAC_COULD_BE_USED_BY_DMA must be the last value written */
 	first->status = EMAC_COULD_BE_USED_BY_DMA;
 	priv->tx_slot = i;
 
@@ -1662,13 +1675,13 @@ xmit_error:
 	/* clean descritors from rbd_first to i */
 	ddesc->ctl = 0;
 	/* setting status to DCLEAN is the last value to be set */
-	wmb();
+	dma_wmb();
 	ddesc->status = DCLEAN;
 	do {
 		ddesc = priv->dd_tx + rbd_first;
 		ddesc->ctl = 0;
 		/* setting status to DCLEAN is the last value to be set */
-		wmb();
+		dma_wmb();
 		ddesc->status = DCLEAN;
 		rb_inc(&rbd_first, priv->nbdesc_tx);
 	} while (rbd_first != i);
@@ -1746,21 +1759,33 @@ static void sun8i_emac_set_rx_mode(struct net_device *ndev)
 	u32 v = 0;
 	int i = 0;
 	struct netdev_hw_addr *ha;
+	int macaddrs = netdev_uc_count(ndev) + netdev_mc_count(ndev) + 1;
 
-	/* Receive all multicast frames */
-	v |= EMAC_FRM_FLT_MULTICAST;
 	/* Receive all control frames */
 	v |= EMAC_FRM_FLT_CTL;
-	if (ndev->flags & IFF_PROMISC)
-		v |= EMAC_FRM_FLT_RXALL;
-	if (netdev_uc_count(ndev) > 7) {
-		v |= EMAC_FRM_FLT_RXALL;
-	} else {
-		netdev_for_each_uc_addr(ha, ndev) {
-			i++;
-			sun8i_emac_set_macaddr(priv, ha->addr, i);
+
+        if (ndev->flags & IFF_PROMISC) {
+                v = EMAC_FRM_FLT_RXALL;
+        } else if (ndev->flags & IFF_ALLMULTI) {
+                v |= EMAC_FRM_FLT_MULTICAST;
+        } else if (macaddrs <= EMAC_MAX_MACADDR) {
+		if (!netdev_mc_empty(ndev)) {
+			netdev_for_each_mc_addr(ha, ndev) {
+				i++;
+				sun8i_emac_set_macaddr(priv, ha->addr, i);
+			}
 		}
+		if (!netdev_uc_empty(ndev)) {
+			netdev_for_each_uc_addr(ha, ndev) {
+				i++;
+				sun8i_emac_set_macaddr(priv, ha->addr, i);
+			}
+		}
+	} else {
+		netdev_info(ndev, "Too many address, switching to promiscuous\n");
+		v = EMAC_FRM_FLT_RXALL;
 	}
+
 	writel(v, priv->base + EMAC_RX_FRM_FLT);
 }
 
